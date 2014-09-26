@@ -1,0 +1,197 @@
+(require* wmeTypes "wmeTypes.clp")
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;
+;;  This file contains Jess / CTAT production rules to solve and tutor
+;;  a shortcut strategy for taking the square of a number ending in 5.
+;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defrule find-one-lower
+    (declare (salience 50))
+    ?prob <- (problem 	(given-number ?n)
+        				(next-lower-number nil)
+        				(ie-next-lower-number ?ie)
+        				(final-answer nil))
+    ?ie <- (interface-element (name ?sel)(value nil))
+  =>
+    (bind ?next-lower-number (- ?n 1))    ; strip off the last digit (the 5)
+    (predict ?sel UpdateTextField ?next-lower-number) ; model the observable action of writing the first part
+   	(modify ?prob (next-lower-number ?next-lower-number)) ; modify the semantic representation of the problem
+    (modify ?ie (value ?next-lower-number)) ; modify the interface representation in working memory - optional in this model
+    (construct-message
+        "[Subtract 1 from the given number.]"
+        )    
+    
+    )
+
+
+
+(defrule find-first-part
+    (declare (salience 50))
+    ?prob <- (problem	(next-lower-number ?next-lower-number&~nil)
+        				(first-part nil)
+        				(ie-first-part ?ie)
+        				(final-answer nil))
+    ?ie <- (interface-element (name ?sel)(value nil))
+  =>
+    (bind ?first (div ?next-lower-number 10))    ; strip off the last digit (the 5)
+    (predict ?sel UpdateTextField ?first) ; model the observable action of writing the first part
+    	(modify ?prob (first-part ?first)) ; modify the semantic representation of the problem
+    (modify ?ie (value ?first)) ; modify the interface representation in working memory - optional in this model
+    (construct-message
+        "[For multi-digit numbers, the first part of the number includes all of the" 
+        " digits up until the last one (the ones place). For example, the first part"
+        " of 2935 is 293.]"
+        )    
+    
+    )
+
+(defrule add-one
+    ?prob <- (problem 	(first-part ?first&~nil)
+        				(first-part-plus-1 nil)
+        				(ie-first-part-plus-1 ?ie))
+    ?ie <- (interface-element (name ?sel) (value nil))
+  =>
+    (bind ?first+1 (+ ?first 1))    ; add 1
+    (predict ?sel UpdateTextField ?first+1) ; observable action
+    	(modify ?prob (first-part-plus-1 ?first+1)) ; modify semantic representation
+    (modify ?ie (value ?first+1)) ; modify interface representation
+        )
+
+
+(defrule product
+    ?prob <- (problem 	(first-part ?first&~nil)
+        				(first-part-plus-1 ?first+1&~nil)
+        				(product nil)
+        				(ie-product ?ie))
+    ?ie <- (interface-element (name ?sel) (value nil))
+  =>
+    (bind ?product (* ?first ?first+1))    ; multiply first to first+1   
+    (predict ?sel UpdateTextField ?product) ; observable action
+    (modify ?prob (product ?product)); modify semantic representation
+        
+    (modify ?ie (value ?product))	; modify interface representation
+    (construct-message
+        "[In other words, what is the answer to the first part multiplied by the first part + 1?]"
+        )
+)
+
+
+
+(defrule append-25
+    ?prob <- (problem 	(product ?product&~nil)
+        				(append-25 nil)
+        				(ie-append-25 ?ie))
+  	?ie <- (interface-element (name ?sel) (value nil))
+  =>
+    (bind ?append-25 (+ (* ?product 100) 25))
+    (predict ?sel UpdateTextField ?append-25)
+    (modify ?prob (append-25 ?append-25)) ; modify semantic representation
+    (modify ?ie (value ?append-25)) ; modify interface representation
+    (construct-message
+      "[ 'Append' means adding something as an attachment or supplement Add '25' 
+         behind the number you got for the product'.]"
+        )  
+)
+
+(defrule square-next-lower
+    ?prob <- (problem 	(square-next-lower nil)
+            			(append-25 ?append-25&~nil)
+        				(given-number ?n)
+        				(ie-square-next-lower ?ie))
+  	?ie <- (interface-element (name ?sel) (value nil))
+  =>
+    (bind ?square-next-lower ?append-25)
+    (predict ?sel UpdateTextField ?square-next-lower)
+    (modify ?prob (square-next-lower ?square-next-lower)) ; modify semantic representation
+    (modify ?ie (value ?square-next-lower)) ; modify interface representation
+    (construct-message
+      "[Add the original number to the answer you got in the previous step.]"
+        )  
+)
+
+(defrule sum-of-all-three-numbers
+    ?prob <- (problem	(sum-of-all-three-numbers nil)
+            			(square-next-lower ?square-next-lower&~nil)
+        				(next-lower-number ?next-lower-number)
+            			(given-number ?n)
+
+        				(ie-sum-of-all-three-numbers ?ie))
+  	?ie <- (interface-element (name ?sel) (value nil))
+  =>
+    (bind ?sum-of-all-three-numbers (+ (+ ?next-lower-number ?n) ?square-next-lower))
+    (predict ?sel UpdateTextField ?sum-of-all-three-numbers)
+    (modify ?prob (sum-of-all-three-numbers ?sum-of-all-three-numbers)) ; modify semantic representation
+    (modify ?ie (value ?sum-of-all-three-numbers)) ; modify interface representation
+    (construct-message
+            "[Add the square of the next lower number, which you found in steps 2-5, the given number "
+        		"from the problem, and the next one lower of that number (step 1)]"
+        )  
+)
+
+
+
+(defrule final-answer
+	?prob <- (problem 	(final-answer nil)
+        			  	(sum-of-all-three-numbers ?sum-of-all-three-numbers&~nil)
+        				(ie-final-answer ?ie))
+    ?ie <- (interface-element (name ?sel) (value nil))
+  =>
+    (bind ?final-answer ?sum-of-all-three-numbers)
+    (predict ?sel UpdateTextField ?final-answer)
+    (modify ?prob (final-answer ?final-answer))
+    (modify ?ie (value ?final-answer))
+    (construct-message
+      "[ Simply copy the answer that you obtained from Append-25.]"
+        )
+)
+
+; generalize
+
+(defrule done
+    ?prob <- (problem	(final-answer ?final-answer&~nil))
+=>
+	(predict-observable-action done ButtonPressed -1)
+    (construct-message
+      "[ You are done.  Press the done button.]"
+        )
+)
+
+
+; This bug rule is for when the student accidentally adds instead of multiplying.
+
+(defrule BUG-product
+    ?prob <- (problem 	(first-part ?first&~nil)
+        				(first-part-plus-1 ?first+1&~nil)
+        				(product nil)
+        				(ie-product ?ie))
+    ?ie <- (interface-element (name ?sel) (value nil))
+=>
+    (bind ?product (+ ?first ?first+1))
+	(predict-observable-action ?sel UpdateTextField ?product)
+    (construct-message
+        "[You added the numbers together instead of multiplying them. Please try again.]"
+        )
+)
+
+; this bug is for when the student accidentally multiples the next lower number by 2 instead of squaring it.
+
+(defrule BUG-square-next-lower
+    ?prob <- (problem 	(square-next-lower nil)
+            			(append-25 ?append-25&~nil)
+        				(next-lower-number ?next-lower-number&~nil)
+        				(given-number ?n)
+        				(ie-square-next-lower ?ie))
+    ?ie <- (interface-element (name ?sel) (value nil))
+=>
+    (bind ?square-next-lower (* ?next-lower-number 2))
+	(predict-observable-action ?sel UpdateTextField ?sq)
+    (construct-message
+        "[You need to square the number, not multiply it by 2.]"
+        )
+)
+
+
+
